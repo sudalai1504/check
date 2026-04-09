@@ -4,14 +4,11 @@ import nodemailer from "nodemailer";
 import cors from "cors";
 import dotenv from "dotenv";
 
-dotenv.config(); // ✅ VERY IMPORTANT
+dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Debug
-console.log("MONGO_URL:", process.env.MONGO_URL);
 
 // ================== MongoDB ==================
 if (!mongoose.connections[0].readyState) {
@@ -52,11 +49,12 @@ function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// ================== ROUTES ==================
+// ================== ROOT FIX (IMPORTANT) ==================
 app.get("/", (req, res) => {
-  res.send("Server running ✅");
+  res.json({ message: "API working ✅" });
 });
 
+// ================== SEND OTP ==================
 app.post("/send-otp", async (req, res) => {
   try {
     const { email, username, password } = req.body;
@@ -85,6 +83,7 @@ app.post("/send-otp", async (req, res) => {
   }
 });
 
+// ================== VERIFY OTP ==================
 app.post("/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -111,5 +110,5 @@ app.post("/verify-otp", async (req, res) => {
   }
 });
 
-// ================== EXPORT ==================
-export default app;
+// ================== EXPORT FOR VERCEL ==================
+export default (req, res) => app(req, res);
