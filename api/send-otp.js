@@ -8,10 +8,13 @@ async function connectDB() {
   try {
     if (isConnected) return;
 
-    const db = await mongoose.connect(process.env.MONGO_URL);
-    isConnected = db.connections[0].readyState;
+    const db = await mongoose.connect(process.env.MONGO_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
 
-    console.log("✅ Mongo Connected");
+    isConnected = db.connections[0].readyState;
+    console.log("✅ MongoDB Atlas Connected");
 
   } catch (err) {
     console.log("❌ Mongo Error:", err);
@@ -41,19 +44,16 @@ export default async function handler(req, res) {
   try {
     await connectDB();
 
-    // 🔥 Method check
     if (req.method !== "POST") {
       return res.status(405).json({ message: "Method not allowed ❌" });
     }
 
     const { email, username, password } = req.body;
 
-    // 🔥 Validation
     if (!email || !username || !password) {
       return res.status(400).json({ message: "All fields required ❌" });
     }
 
-    // 🔥 Generate OTP
     const otp = generateOTP();
 
     await Otp.deleteMany({ email });
@@ -78,8 +78,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ message: "OTP sent ✅" });
 
   } catch (err) {
-
-    // 🔥 FULL ERROR DEBUG
     console.log("🔥 FULL ERROR:", err);
 
     return res.status(500).json({

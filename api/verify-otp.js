@@ -1,9 +1,15 @@
 import mongoose from "mongoose";
 
-if (!mongoose.connections[0].readyState) {
-  await mongoose.connect(process.env.MONGO_URL);
+let isConnected = false;
+
+async function connectDB() {
+  if (isConnected) return;
+
+  const db = await mongoose.connect(process.env.MONGO_URL);
+  isConnected = db.connections[0].readyState;
 }
 
+// Schema
 const otpSchema = new mongoose.Schema({
   email: String,
   otp: String,
@@ -22,20 +28,36 @@ const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export default async function handler(req, res) {
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+  try {
+    await connectDB();
+
+    if (req.method !== "POST") {
+      return res.status(405).json({ message: "Method not allowed ❌" });
+    }
+
+    const { email, otp } = req.body;
+
+    const record = await Otp.findOne({ email, otp });
+
+    if (!record) {
+      return res.status(400).json({ message: "Invalid OTP ❌" });
+    }
+
+    await User.create({
+      username: record.username,
+      password: record.password,
+      email: record.email
+    });
+
+    await Otp.deleteMany({ email });
+
+    return res.json({ message: "Registration Successful ✅" });
+
+  } catch (err) {
+    console.log("🔥 VERIFY ERROR:", err);
+
+    return res.status(500).json({
+      message: err.message || "Server error ❌"
+    });
   }
-
-  const { email, otp } = req.body;
-
-  const record = await Otp.findOne({ email, otp });
-
-  if (!record) {
-    return res.status(400).json({ message: "Invalid OTP ❌" });
-  }
-
-  await User.create(record);
-  await Otp.deleteMany({ email });
-
-  res.json({ message: "Registration Successful ✅" });
 }
