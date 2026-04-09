@@ -1,5 +1,12 @@
 {
+  "name": "otp-server",
+  "version": "1.0.0",
+  "description": "OTP verification backend",
   "type": "module",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "mongoose": "^7.0.0",
