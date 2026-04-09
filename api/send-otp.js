@@ -1,16 +1,25 @@
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 
+// ================= DB CONNECT =================
 let isConnected = false;
 
 async function connectDB() {
-  if (isConnected) return;
+  try {
+    if (isConnected) return;
 
-  const db = await mongoose.connect(process.env.MONGO_URL);
-  isConnected = db.connections[0].readyState;
+    const db = await mongoose.connect(process.env.MONGO_URL);
+    isConnected = db.connections[0].readyState;
+
+    console.log("✅ Mongo Connected");
+
+  } catch (err) {
+    console.log("❌ Mongo Error:", err);
+    throw new Error("MongoDB connection failed");
+  }
 }
 
-// Schema
+// ================= SCHEMA =================
 const otpSchema = new mongoose.Schema({
   email: String,
   otp: String,
@@ -21,26 +30,36 @@ const otpSchema = new mongoose.Schema({
 
 const Otp = mongoose.models.Otp || mongoose.model("Otp", otpSchema);
 
+// ================= OTP =================
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+// ================= HANDLER =================
 export default async function handler(req, res) {
 
   try {
     await connectDB();
 
+    // 🔥 Method check
     if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method not allowed" });
+      return res.status(405).json({ message: "Method not allowed ❌" });
     }
 
     const { email, username, password } = req.body;
 
+    // 🔥 Validation
+    if (!email || !username || !password) {
+      return res.status(400).json({ message: "All fields required ❌" });
+    }
+
+    // 🔥 Generate OTP
     const otp = generateOTP();
 
     await Otp.deleteMany({ email });
     await Otp.create({ email, otp, username, password });
 
+    // ================= MAIL =================
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -52,14 +71,19 @@ export default async function handler(req, res) {
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
-      subject: "OTP",
+      subject: "OTP Verification",
       text: `Your OTP is ${otp}`
     });
 
-    return res.json({ message: "OTP sent ✅" });
+    return res.status(200).json({ message: "OTP sent ✅" });
 
   } catch (err) {
-    console.log("ERROR:", err);
-    return res.status(500).json({ message: "Server error ❌" });
+
+    // 🔥 FULL ERROR DEBUG
+    console.log("🔥 FULL ERROR:", err);
+
+    return res.status(500).json({
+      message: err.message || "Server error ❌"
+    });
   }
 }
