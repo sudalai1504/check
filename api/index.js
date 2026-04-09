@@ -1,23 +1,14 @@
-import express from "express";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-import cors from "cors";
-import dotenv from "dotenv";
 
-dotenv.config();
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// ================== MongoDB ==================
+// Mongo connect
 if (!mongoose.connections[0].readyState) {
   mongoose.connect(process.env.MONGO_URL)
-    .then(() => console.log("✅ Mongo Connected"))
-    .catch(err => console.log("❌ Mongo Error:", err));
+    .then(() => console.log("Mongo Connected"))
+    .catch(err => console.log(err));
 }
 
-// ================== Schema ==================
+// Schema
 const otpSchema = new mongoose.Schema({
   email: String,
   otp: String,
@@ -35,7 +26,7 @@ const userSchema = new mongoose.Schema({
 const Otp = mongoose.models.Otp || mongoose.model("Otp", otpSchema);
 const User = mongoose.models.User || mongoose.model("User", userSchema);
 
-// ================== Mail ==================
+// Mail
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -44,24 +35,22 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// ================== OTP ==================
+// OTP
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// ================== ROOT FIX (IMPORTANT) ==================
-app.get("/", (req, res) => {
-  res.json({ message: "API working ✅" });
-});
+// ================= SERVERLESS HANDLER =================
+export default async function handler(req, res) {
 
-// ================== SEND OTP ==================
-app.post("/send-otp", async (req, res) => {
-  try {
+  // 🔥 TEST ROUTE
+  if (req.method === "GET") {
+    return res.status(200).json({ message: "API working ✅" });
+  }
+
+  // ================= SEND OTP =================
+  if (req.method === "POST" && req.url.includes("send-otp")) {
     const { email, username, password } = req.body;
-
-    if (!email || !username || !password) {
-      return res.status(400).json({ message: "All fields required ❌" });
-    }
 
     const otp = generateOTP();
 
@@ -71,21 +60,15 @@ app.post("/send-otp", async (req, res) => {
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
-      subject: "OTP Verification",
+      subject: "OTP",
       text: `Your OTP is ${otp}`
     });
 
-    res.json({ message: "OTP sent ✅" });
-
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Error sending OTP ❌" });
+    return res.json({ message: "OTP sent ✅" });
   }
-});
 
-// ================== VERIFY OTP ==================
-app.post("/verify-otp", async (req, res) => {
-  try {
+  // ================= VERIFY OTP =================
+  if (req.method === "POST" && req.url.includes("verify-otp")) {
     const { email, otp } = req.body;
 
     const record = await Otp.findOne({ email, otp });
@@ -94,21 +77,11 @@ app.post("/verify-otp", async (req, res) => {
       return res.status(400).json({ message: "Invalid OTP ❌" });
     }
 
-    await User.create({
-      username: record.username,
-      password: record.password,
-      email: record.email
-    });
-
+    await User.create(record);
     await Otp.deleteMany({ email });
 
-    res.json({ message: "Registration Successful ✅" });
-
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Server error ❌" });
+    return res.json({ message: "Registration Successful ✅" });
   }
-});
 
-// ================== EXPORT FOR VERCEL ==================
-export default (req, res) => app(req, res);
+  return res.status(404).json({ message: "Not Found ❌" });
+}
