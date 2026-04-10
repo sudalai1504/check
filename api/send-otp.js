@@ -1,7 +1,6 @@
 import { connectDB } from "./db.js";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-import bcrypt from "bcryptjs";
 
 // Schema
 const otpSchema = new mongoose.Schema({
@@ -24,7 +23,7 @@ export default async function handler(req, res) {
     await connectDB();
 
     if (req.method !== "POST") {
-      return res.status(405).json({ message: "Only POST allowed ❌" });
+      return res.status(405).json({ message: "Method not allowed ❌" });
     }
 
     const { email, username, password } = req.body;
@@ -33,21 +32,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "All fields required ❌" });
     }
 
-    // 🔐 Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     const otp = generateOTP();
 
     await Otp.deleteMany({ email });
+    await Otp.create({ email, otp, username, password });
 
-    await Otp.create({
-      email,
-      otp,
-      username,
-      password: hashedPassword
-    });
-
-    // Mail config
+    // MAIL
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -63,16 +53,10 @@ export default async function handler(req, res) {
       text: `Your OTP is ${otp}`
     });
 
-    return res.status(200).json({
-      success: true,
-      message: "OTP sent ✅"
-    });
+    return res.status(200).json({ message: "OTP sent ✅" });
 
   } catch (err) {
     console.log("🔥 ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
+    return res.status(500).json({ message: err.message });
   }
 }
