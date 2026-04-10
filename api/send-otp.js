@@ -1,28 +1,9 @@
+import { connectDB } from "./db.js";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
+import bcrypt from "bcryptjs";
 
-// ================= DB CONNECT =================
-let isConnected = false;
-
-async function connectDB() {
-  try {
-    if (isConnected) return;
-
-    const db = await mongoose.connect(process.env.MONGO_URL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
-    isConnected = db.connections[0].readyState;
-    console.log("✅ MongoDB Atlas Connected");
-
-  } catch (err) {
-    console.log("❌ Mongo Error:", err);
-    throw new Error("MongoDB connection failed");
-  }
-}
-
-// ================= SCHEMA =================
+// Schema
 const otpSchema = new mongoose.Schema({
   email: String,
   otp: String,
@@ -33,19 +14,17 @@ const otpSchema = new mongoose.Schema({
 
 const Otp = mongoose.models.Otp || mongoose.model("Otp", otpSchema);
 
-// ================= OTP =================
+// OTP generate
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// ================= HANDLER =================
 export default async function handler(req, res) {
-
   try {
     await connectDB();
 
     if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method not allowed ❌" });
+      return res.status(405).json({ message: "Only POST allowed ❌" });
     }
 
     const { email, username, password } = req.body;
@@ -54,12 +33,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "All fields required ❌" });
     }
 
+    // 🔐 Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const otp = generateOTP();
 
     await Otp.deleteMany({ email });
-    await Otp.create({ email, otp, username, password });
 
-    // ================= MAIL =================
+    await Otp.create({
+      email,
+      otp,
+      username,
+      password: hashedPassword
+    });
+
+    // Mail config
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -75,13 +63,16 @@ export default async function handler(req, res) {
       text: `Your OTP is ${otp}`
     });
 
-    return res.status(200).json({ message: "OTP sent ✅" });
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent ✅"
+    });
 
   } catch (err) {
-    console.log("🔥 FULL ERROR:", err);
-
+    console.log("🔥 ERROR:", err);
     return res.status(500).json({
-      message: err.message || "Server error ❌"
+      success: false,
+      message: err.message
     });
   }
 }
