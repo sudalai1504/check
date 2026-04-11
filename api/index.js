@@ -3,10 +3,8 @@ import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import cors from "cors";
 import dotenv from "dotenv";
-
-import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-
+import User from "../models/User.js";
 
 dotenv.config();
 
@@ -72,7 +70,7 @@ app.get("/", (req, res) => {
   res.json({ message: "🔥 Server Running", status: "ok" });
 });
 
-// Send OTP
+// ─── Send OTP ──────────────────────────────────────────────────────────────────
 app.post("/send-otp", async (req, res) => {
   const { email } = req.body;
 
@@ -126,7 +124,7 @@ app.post("/send-otp", async (req, res) => {
   }
 });
 
-// Verify OTP + Register
+// ─── Verify OTP + Register ─────────────────────────────────────────────────────
 app.post("/verify-otp", async (req, res) => {
   const { username, email, password, otp } = req.body;
 
@@ -164,6 +162,42 @@ app.post("/verify-otp", async (req, res) => {
   } catch (err) {
     console.error("❌ Register error:", err.message);
     res.status(500).json({ message: "Registration failed. Try again." });
+  }
+});
+
+// ─── Login ─────────────────────────────────────────────────────────────────────
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.verified) {
+      return res.status(403).json({ message: "Email not verified" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    res.json({
+      message: "Login successful ✅",
+      user: {
+        username: user.username,
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Login error:", err.message);
+    res.status(500).json({ message: "Login failed. Try again." });
   }
 });
 
