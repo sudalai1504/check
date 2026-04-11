@@ -5,6 +5,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
+import bcrypt from "bcryptjs";
 
 dotenv.config();
 
