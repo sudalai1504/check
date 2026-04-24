@@ -22,8 +22,24 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // ─── Profile Fields ───────────────────────────────────────────────────────
+    contactNumber: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    bloodGroup: {
+      type: String,
+      default: "",
+      enum: ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+    },
+    address: {
+      type: String,
+      default: "",
+      trim: true,
+    },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("User", userSchema);
+export default mongoose.models.User || mongoose.model("User", userSchema);

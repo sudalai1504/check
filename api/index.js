@@ -4,7 +4,9 @@ import nodemailer from "nodemailer";
 import cors from "cors";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import authMiddleware from "../middleware/auth.js";
 
 dotenv.config();
 
@@ -51,6 +53,14 @@ const isOTPValid = (email, otp) => {
     return false;
   }
   return record.otp === otp;
+};
+
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id, email: user.email, username: user.username },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 };
 
 // ─── Middleware: Connect DB on every request ───────────────────────────────────
@@ -107,7 +117,7 @@ app.post("/send-otp", async (req, res) => {
       html: `
         <div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:32px;border:1px solid #e2e8f0;border-radius:12px;">
           <h2 style="color:#1a202c;margin-bottom:8px;">Email Verification</h2>
-          <p style="color:#4a5568;">Use this OTP to verify your email. Expires in <strong>5 minutes</strong>.</p>
+          <p style="color:#4a5568;">Use this OTP to verify your email. Expires in <strong>2 minutes</strong>.</p>
           <div style="font-size:36px;font-weight:bold;letter-spacing:10px;color:#3182ce;margin:28px 0;padding:16px;background:#ebf8ff;border-radius:8px;text-align:center;">
             ${otp}
           </div>
@@ -133,7 +143,9 @@ app.post("/verify-otp", async (req, res) => {
   }
 
   if (password.length < 6) {
-    return res.status(400).json({ message: "Password must be at least 6 characters" });
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 6 characters" });
   }
 
   if (!isOTPValid(email, otp)) {
@@ -158,7 +170,17 @@ app.post("/verify-otp", async (req, res) => {
     await user.save();
     delete otpStore[email];
 
-    res.status(201).json({ message: "User registered successfully 🎉" });
+    // Auto-login after register → return token
+    const token = generateToken(user);
+
+    res.status(201).json({
+      message: "User registered successfully 🎉",
+      token,
+      user: {
+        username: user.username,
+        email: user.email,
+      },
+    });
   } catch (err) {
     console.error("❌ Register error:", err.message);
     res.status(500).json({ message: "Registration failed. Try again." });
@@ -188,8 +210,12 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
+    // Generate JWT token
+    const token = generateToken(user);
+
     res.json({
       message: "Login successful ✅",
+      token,
       user: {
         username: user.username,
         email: user.email,
@@ -198,6 +224,87 @@ app.post("/login", async (req, res) => {
   } catch (err) {
     console.error("❌ Login error:", err.message);
     res.status(500).json({ message: "Login failed. Try again." });
+  }
+});
+
+// ─── GET Profile ───────────────────────────────────────────────────────────────
+// GET /profile
+// Header: Authorization: Bearer <token>
+app.get("/profile", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      message: "Profile fetched successfully ✅",
+      profile: {
+        username: user.username,
+        email: user.email,
+        contactNumber: user.contactNumber,
+        bloodGroup: user.bloodGroup,
+        address: user.address,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Profile fetch error:", err.message);
+    res.status(500).json({ message: "Failed to fetch profile." });
+  }
+});
+
+// ─── UPDATE Profile ────────────────────────────────────────────────────────────
+// PUT /profile
+// Header: Authorization: Bearer <token>
+// Body: { username, contactNumber, bloodGroup, address }
+app.put("/profile", authMiddleware, async (req, res) => {
+  const { username, contactNumber, bloodGroup, address } = req.body;
+
+  // Validate contactNumber if provided
+  if (contactNumber) {
+    const phoneRegex = /^[6-9]\d{9}$/; // Indian mobile number format
+    if (!phoneRegex.test(contactNumber)) {
+      return res.status(400).json({ message: "Invalid contact number. Enter a valid 10-digit Indian mobile number." });
+    }
+  }
+
+  // Validate bloodGroup if provided
+  const validBloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+  if (bloodGroup && !validBloodGroups.includes(bloodGroup)) {
+    return res.status(400).json({ message: "Invalid blood group." });
+  }
+
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        ...(username && { username }),
+        ...(contactNumber !== undefined && { contactNumber }),
+        ...(bloodGroup !== undefined && { bloodGroup }),
+        ...(address !== undefined && { address }),
+      },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      message: "Profile updated successfully ✅",
+      profile: {
+        username: updatedUser.username,
+        email: updatedUser.email,
+        contactNumber: updatedUser.contactNumber,
+        bloodGroup: updatedUser.bloodGroup,
+        address: updatedUser.address,
+        updatedAt: updatedUser.updatedAt,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Profile update error:", err.message);
+    res.status(500).json({ message: "Failed to update profile." });
   }
 });
 
